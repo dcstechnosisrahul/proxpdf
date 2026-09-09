@@ -12,6 +12,8 @@ dependencies:
   # PDF Processing
  
   printing: ^5.11.1
+  pdfx: ^2.6.0
+  image: ^4.2.0
   
   # File Handling
   file_picker: ^6.1.1
@@ -24,6 +26,7 @@ dependencies:
   provider: ^6.0.5
   syncfusion_flutter_pdf: ^26.1.41
   pdf: ^3.11.1
+  excel: ^4.0.3
   
   # UI/UX
   google_fonts: ^6.1.0

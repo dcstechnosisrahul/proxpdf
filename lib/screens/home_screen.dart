@@ -9,6 +9,7 @@ import 'package:proxpdf/widgets/file_list_widget.dart';
 import 'package:proxpdf/widgets/mobile_drawer.dart';
 import 'package:proxpdf/utils/responsive_utils.dart';
 import 'package:proxpdf/utils/theme_utils.dart';
+import 'package:proxpdf/utils/file_saver.dart';
 import 'package:proxpdf/services/pdf_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
@@ -58,7 +59,9 @@ class _DesktopHomeScreen extends StatelessWidget {
                   radius: 12,
                   backgroundColor: AppColors.primary,
                   child: Text(
-                    auth.currentUser.isNotEmpty ? auth.currentUser[0].toUpperCase() : 'U',
+                    auth.currentUser.isNotEmpty
+                        ? auth.currentUser[0].toUpperCase()
+                        : 'U',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 12,
@@ -227,7 +230,8 @@ class _DesktopHomeScreen extends StatelessWidget {
             ),
             if (provider.uploadedFiles.isNotEmpty)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   color: Colors.green.shade50,
                   borderRadius: BorderRadius.circular(20),
@@ -269,9 +273,10 @@ class _DesktopHomeScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _handleToolTap(BuildContext context, PDFProvider provider, tool) async {
+  Future<void> _handleToolTap(
+      BuildContext context, PDFProvider provider, tool) async {
     provider.setSelectedTool(tool.id);
-    
+
     if (provider.uploadedFiles.isEmpty) {
       await _pickPDFFiles(context, provider, tool.id);
       return;
@@ -280,10 +285,11 @@ class _DesktopHomeScreen extends StatelessWidget {
     await _processTool(context, provider, tool.id);
   }
 
-  Future<void> _pickPDFFiles(BuildContext context, PDFProvider provider, String toolId) async {
+  Future<void> _pickPDFFiles(
+      BuildContext context, PDFProvider provider, String toolId) async {
     try {
       final bool allowMultiple = toolId == 'merge' || toolId == 'organize';
-      
+
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         allowMultiple: allowMultiple,
         type: FileType.custom,
@@ -327,7 +333,8 @@ class _DesktopHomeScreen extends StatelessWidget {
     }
   }
 
-  Future<void> _processTool(BuildContext context, PDFProvider provider, String toolId) async {
+  Future<void> _processTool(
+      BuildContext context, PDFProvider provider, String toolId) async {
     switch (toolId) {
       case 'merge':
         await _processMerge(context, provider);
@@ -375,7 +382,8 @@ class _DesktopHomeScreen extends StatelessWidget {
       return;
     }
 
-    _showProcessingDialog(context, 'Merging ${provider.uploadedFiles.length} PDF files...');
+    _showProcessingDialog(
+        context, 'Merging ${provider.uploadedFiles.length} PDF files...');
 
     try {
       final mergedPDF = await PDFService.mergePDFs(provider.uploadedFiles);
@@ -403,7 +411,8 @@ class _DesktopHomeScreen extends StatelessWidget {
     _showProcessingDialog(context, 'Splitting PDF...');
 
     try {
-      final splitFiles = await PDFService.splitPDF(provider.uploadedFiles.first);
+      final splitFiles =
+          await PDFService.splitPDF(provider.uploadedFiles.first);
       Navigator.pop(context);
       _showSplitSuccessDialog(context, splitFiles);
       provider.clearFiles();
@@ -414,7 +423,8 @@ class _DesktopHomeScreen extends StatelessWidget {
   }
 
   // ============ 3. COMPRESS ============
-  Future<void> _processCompress(BuildContext context, PDFProvider provider) async {
+  Future<void> _processCompress(
+      BuildContext context, PDFProvider provider) async {
     if (provider.uploadedFiles.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -428,9 +438,11 @@ class _DesktopHomeScreen extends StatelessWidget {
     _showProcessingDialog(context, 'Compressing PDF...');
 
     try {
-      final compressedPDF = await PDFService.compressPDF(provider.uploadedFiles.first);
+      final compressedPDF =
+          await PDFService.compressPDF(provider.uploadedFiles.first);
       Navigator.pop(context);
-      _showSuccessDialog(context, compressedPDF, 'PDF Compressed Successfully!');
+      _showSuccessDialog(
+          context, compressedPDF, 'PDF Compressed Successfully!');
       provider.clearFiles();
     } catch (e) {
       Navigator.pop(context);
@@ -439,41 +451,66 @@ class _DesktopHomeScreen extends StatelessWidget {
   }
 
   // ============ 4. CONVERT ============
-  Future<void> _processConvert(BuildContext context, PDFProvider provider) async {
+  Future<void> _processConvert(
+      BuildContext context, PDFProvider provider) async {
     try {
+      // Allow Images, TXT, Excel
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         allowMultiple: false,
-        type: FileType.image,
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'txt', 'xlsx'],
         withData: true,
       );
 
       if (result == null || result.files.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('No image selected'),
-            backgroundColor: Colors.orange,
-          ),
+              content: Text('No file selected'),
+              backgroundColor: Colors.orange),
         );
         return;
       }
 
-      _showProcessingDialog(context, 'Converting image to PDF...');
+      final file = result.files.first;
+      final extension = file.extension?.toLowerCase();
+      final fileBytes = file.bytes;
 
-      try {
-        final convertedPDF = await PDFService.convertToPDF(result.files.first.bytes!);
-        Navigator.pop(context);
-        _showSuccessDialog(context, convertedPDF, 'Image Converted to PDF!');
-      } catch (e) {
-        Navigator.pop(context);
-        _showErrorDialog(context, e.toString());
+      if (fileBytes == null) {
+        _showErrorDialog(context, 'Unable to read file data');
+        return;
       }
+
+      _showProcessingDialog(context, 'Converting ${file.name} to PDF...');
+
+      Uint8List convertedPDF;
+      if (['jpg', 'jpeg', 'png'].contains(extension)) {
+        convertedPDF = await PDFService.convertImageToPDF(fileBytes);
+      } else if (extension == 'txt') {
+        convertedPDF = await PDFService.convertTextToPDF(fileBytes);
+      } else if (extension == 'xlsx') {
+        convertedPDF = await PDFService.convertExcelToPDF(fileBytes);
+      } else {
+        Navigator.pop(context);
+        _showErrorDialog(context, 'Unsupported format');
+        return;
+      }
+
+      Navigator.pop(context);
+      _showSuccessDialog(
+        context,
+        convertedPDF,
+        'Converted to PDF Successfully!',
+        defaultFileName: '${file.name.split('.').first}.pdf',
+      );
     } catch (e) {
-      _showErrorDialog(context, e.toString());
+      Navigator.pop(context);
+      _showErrorDialog(context, 'Conversion failed: ${e.toString()}');
     }
   }
 
   // ============ 5. ROTATE ============
-  Future<void> _processRotate(BuildContext context, PDFProvider provider) async {
+  Future<void> _processRotate(
+      BuildContext context, PDFProvider provider) async {
     if (provider.uploadedFiles.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -490,7 +527,8 @@ class _DesktopHomeScreen extends StatelessWidget {
     _showProcessingDialog(context, 'Rotating PDF...');
 
     try {
-      final rotatedPDF = await PDFService.rotatePDF(provider.uploadedFiles.first, degrees);
+      final rotatedPDF =
+          await PDFService.rotatePDF(provider.uploadedFiles.first, degrees);
       Navigator.pop(context);
       _showSuccessDialog(context, rotatedPDF, 'PDF Rotated ${degrees}°!');
       provider.clearFiles();
@@ -501,7 +539,8 @@ class _DesktopHomeScreen extends StatelessWidget {
   }
 
   // ============ 6. UNLOCK ============
-  Future<void> _processUnlock(BuildContext context, PDFProvider provider) async {
+  Future<void> _processUnlock(
+      BuildContext context, PDFProvider provider) async {
     if (provider.uploadedFiles.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -518,7 +557,8 @@ class _DesktopHomeScreen extends StatelessWidget {
     _showProcessingDialog(context, 'Unlocking PDF...');
 
     try {
-      final unlockedPDF = await PDFService.unlockPDF(provider.uploadedFiles.first, password);
+      final unlockedPDF =
+          await PDFService.unlockPDF(provider.uploadedFiles.first, password);
       Navigator.pop(context);
       _showSuccessDialog(context, unlockedPDF, 'PDF Unlocked Successfully!');
       provider.clearFiles();
@@ -529,7 +569,8 @@ class _DesktopHomeScreen extends StatelessWidget {
   }
 
   // ============ 7. WATERMARK ============
-  Future<void> _processWatermark(BuildContext context, PDFProvider provider) async {
+  Future<void> _processWatermark(
+      BuildContext context, PDFProvider provider) async {
     if (provider.uploadedFiles.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -559,8 +600,9 @@ class _DesktopHomeScreen extends StatelessWidget {
     }
   }
 
-  // ============ 8. ORGANIZE ============
-  Future<void> _processOrganize(BuildContext context, PDFProvider provider) async {
+// ============ 8. ORGANIZE ============
+  Future<void> _processOrganize(
+      BuildContext context, PDFProvider provider) async {
     if (provider.uploadedFiles.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -571,11 +613,18 @@ class _DesktopHomeScreen extends StatelessWidget {
       return;
     }
 
-    final info = await PDFService.getPDFInfo(provider.uploadedFiles.first);
-    final newOrder = await _showOrganizeDialog(context, info['pages']);
+    // Visual dialog show karein jisme thumbnails dikhenge
+    final newOrder = await showDialog<List<int>>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => OrganizePagesDialog(
+        pdfBytes: provider.uploadedFiles.first,
+      ),
+    );
+
     if (newOrder == null) return;
 
-    _showProcessingDialog(context, 'Organizing pages...');
+    _showProcessingDialog(context, 'Reordering pages...');
 
     try {
       final organizedPDF = await PDFService.organizePages(
@@ -583,7 +632,12 @@ class _DesktopHomeScreen extends StatelessWidget {
         newOrder,
       );
       Navigator.pop(context);
-      _showSuccessDialog(context, organizedPDF, 'Pages Organized!');
+      _showSuccessDialog(
+        context,
+        organizedPDF,
+        'Pages Organized Successfully!',
+        defaultFileName: 'organized.pdf',
+      );
       provider.clearFiles();
     } catch (e) {
       Navigator.pop(context);
@@ -614,16 +668,22 @@ class _DesktopHomeScreen extends StatelessWidget {
     );
   }
 
-  void _showSuccessDialog(BuildContext context, Uint8List pdfData, String title) {
+  // Success Dialog for Single File (Merge, Compress, Rotate, Unlock, Watermark, Convert)
+  void _showSuccessDialog(
+    BuildContext context,
+    Uint8List pdfData,
+    String title, {
+    String defaultFileName = 'output.pdf',
+  }) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
+        title: const Row(
           children: [
-            const Icon(Icons.check_circle, color: Colors.green),
-            const SizedBox(width: 8),
-            const Text('Success!'),
+            Icon(Icons.check_circle, color: Colors.green),
+            SizedBox(width: 8),
+            Text('Success!'),
           ],
         ),
         content: Column(
@@ -634,6 +694,7 @@ class _DesktopHomeScreen extends StatelessWidget {
             Text(
               title,
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
@@ -649,23 +710,32 @@ class _DesktopHomeScreen extends StatelessWidget {
           ),
           ElevatedButton.icon(
             onPressed: () {
+              // Actual file download
+              FileSaver.downloadFile(pdfData, defaultFileName);
+
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Download started!'),
+                SnackBar(
+                  content: Text('$defaultFileName downloaded successfully!'),
                   backgroundColor: Colors.green,
                 ),
               );
             },
             icon: const Icon(Icons.download),
-            label: const Text('Download'),
+            label: const Text('Download PDF'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
           ),
         ],
       ),
     );
   }
 
-  void _showSplitSuccessDialog(BuildContext context, List<Uint8List> splitFiles) {
+// Success Dialog for Split PDF (Multiple Files)
+  void _showSplitSuccessDialog(
+      BuildContext context, List<Uint8List> splitFiles) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -677,31 +747,80 @@ class _DesktopHomeScreen extends StatelessWidget {
             Text('Split Complete!'),
           ],
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.call_split, size: 60, color: Colors.purple),
-            const SizedBox(height: 12),
-            Text(
-              'PDF split into ${splitFiles.length} files',
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-            ),
-            const SizedBox(height: 8),
-            ...splitFiles.asMap().entries.map((entry) {
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Text(
-                  'File ${entry.key + 1}: ${(entry.value.length / 1024).toStringAsFixed(2)} KB',
-                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+        content: SizedBox(
+          width: 350,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.folder_zip, size: 50, color: Colors.purple),
+              const SizedBox(height: 12),
+              Text(
+                'PDF split into ${splitFiles.length} pages',
+                style:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 12),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 200),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: splitFiles.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final fileBytes = splitFiles[index];
+                    final fileName = 'split_page_${index + 1}.pdf';
+                    return ListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('Page ${index + 1}'),
+                      subtitle: Text(
+                        '${(fileBytes.length / 1024).toStringAsFixed(2)} KB',
+                        style: TextStyle(
+                            color: Colors.grey.shade600, fontSize: 12),
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.download,
+                            color: AppColors.primary),
+                        tooltip: 'Download this page',
+                        onPressed: () {
+                          FileSaver.downloadFile(fileBytes, fileName);
+                        },
+                      ),
+                    );
+                  },
                 ),
-              );
-            }).toList(),
-          ],
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              // Saari files ek ZIP file mein pack hokar download hongi
+              FileSaver.downloadZip(
+                splitFiles,
+                'split_pages.zip',
+                filePrefix: 'split_page',
+              );
+
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Downloading split_pages.zip...'),
+                  backgroundColor: Colors.green,
+                ),
+              );
+            },
+            icon: const Icon(Icons.archive),
+            label: const Text('Download All as ZIP'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+            ),
           ),
         ],
       ),
@@ -845,7 +964,8 @@ class _DesktopHomeScreen extends StatelessWidget {
     );
   }
 
-  Future<List<int>?> _showOrganizeDialog(BuildContext context, int pageCount) async {
+  Future<List<int>?> _showOrganizeDialog(
+      BuildContext context, int pageCount) async {
     List<int> newOrder = List.generate(pageCount, (i) => i);
     return showDialog<List<int>>(
       context: context,
@@ -936,5 +1056,177 @@ class _MobileHomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     // Simplified mobile version
     return const _DesktopHomeScreen();
+  }
+}
+
+class OrganizePagesDialog extends StatefulWidget {
+  final Uint8List pdfBytes;
+
+  const OrganizePagesDialog({super.key, required this.pdfBytes});
+
+  @override
+  State<OrganizePagesDialog> createState() => _OrganizePagesDialogState();
+}
+
+class _OrganizePagesDialogState extends State<OrganizePagesDialog> {
+  bool _isLoading = true;
+  List<Uint8List> _thumbnails = [];
+  List<int> _order = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPages();
+  }
+
+  Future<void> _loadPages() async {
+    final images = await PDFService.getPageThumbnails(widget.pdfBytes);
+    setState(() {
+      _thumbnails = images;
+      _order = List.generate(images.length, (index) => index);
+      _isLoading = false;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: const Row(
+        children: [
+          Icon(Icons.view_module, color: AppColors.primary),
+          SizedBox(width: 8),
+          Text('Organize Pages (Drag & Drop)'),
+        ],
+      ),
+      content: SizedBox(
+        width: 650,
+        height: 450,
+        child: _isLoading
+            ? const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(),
+                    SizedBox(height: 16),
+                    Text('Rendering page previews...'),
+                  ],
+                ),
+              )
+            : ReorderableListView.builder(
+                scrollDirection: Axis.vertical,
+                itemCount: _order.length,
+                onReorder: (oldIndex, newIndex) {
+                  setState(() {
+                    if (oldIndex < newIndex) newIndex--;
+                    final item = _order.removeAt(oldIndex);
+                    _order.insert(newIndex, item);
+                  });
+                },
+                itemBuilder: (context, visualIndex) {
+                  final originalIndex = _order[visualIndex];
+                  final imageBytes = _thumbnails[originalIndex];
+
+                  return Card(
+                    key: ValueKey('page_$originalIndex'),
+                    elevation: 3,
+                    margin:
+                        const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Row(
+                        children: [
+                          // New Position Badge
+                          CircleAvatar(
+                            radius: 16,
+                            backgroundColor: AppColors.primary,
+                            child: Text(
+                              '${visualIndex + 1}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+
+                          // Thumbnail Preview
+                          Container(
+                            height: 100,
+                            width: 75,
+                            decoration: BoxDecoration(
+                              border: Border.all(color: Colors.grey.shade300),
+                              borderRadius: BorderRadius.circular(6),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.05),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(5),
+                              child: Image.memory(
+                                imageBytes,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+
+                          // Details
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Original Page ${originalIndex + 1}',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Moving to Position ${visualIndex + 1}',
+                                  style: TextStyle(
+                                    color: Colors.grey.shade600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Drag Handle Icon
+                          const Icon(Icons.drag_indicator,
+                              color: Colors.grey, size: 28),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isLoading ? null : () => Navigator.pop(context, _order),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Apply Order'),
+        ),
+      ],
+    );
   }
 }

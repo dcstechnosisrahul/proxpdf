@@ -23,7 +23,7 @@ class _DropzoneWidgetState extends State<DropzoneWidget> {
     final provider = Provider.of<PDFProvider>(context);
 
     return Container(
-      height: isMobile ? 200 : 280,
+      height: isMobile ? 200 : 260,
       decoration: BoxDecoration(
         color: _isDragging ? Colors.blue.shade50 : Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -37,45 +37,120 @@ class _DropzoneWidgetState extends State<DropzoneWidget> {
             BoxShadow(
               color: Colors.grey.shade100,
               blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
         ],
       ),
-      child: isMobile ? _buildMobileUpload(context, provider) : _buildWebDropzone(context, provider),
+      child: isMobile
+          ? _buildMobileUpload(context, provider)
+          : _buildWebDropzone(context, provider),
     );
   }
 
+  // ==================== WEB DROPZONE ====================
   Widget _buildWebDropzone(BuildContext context, PDFProvider provider) {
-    return DropzoneView(
-      operation: DragOperation.copy,
-      onCreated: (ctrl) => controller = ctrl,
-      onDrop: (event) async {
-        try {
-          // New method for getting file data
-          final data = await controller.getFileData(event);
-          if (data != null) {
-            provider.addFile(data);
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('File uploaded successfully!'),
-                backgroundColor: Colors.green,
-              ),
-            );
-          }
-        } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error uploading file: $e'),
-              backgroundColor: Colors.red,
+    return Stack(
+      children: [
+        // 1. Invisible HTML Native Drop Area (Fills Entire Container)
+        Positioned.fill(
+          child: DropzoneView(
+            operation: DragOperation.copy,
+            cursor: CursorType.grab,
+            onCreated: (ctrl) => controller = ctrl,
+            onHover: () => setState(() => _isDragging = true),
+            onLeave: () => setState(() => _isDragging = false),
+            // Use onDropFiles to handle single or multiple dropped files reliably
+            onDropFiles: (List<dynamic>? files) async {
+              setState(() => _isDragging = false);
+              if (files == null || files.isEmpty) return;
+
+              int successCount = 0;
+              for (final file in files) {
+                try {
+                  final name = await controller.getFilename(file);
+                  if (name.toLowerCase().endsWith('.pdf')) {
+                    final data = await controller.getFileData(file);
+                    provider.addFile(data);
+                    successCount++;
+                  }
+                } catch (e) {
+                  debugPrint('Error reading dropped file: $e');
+                }
+              }
+
+              if (successCount > 0 && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('✅ $successCount PDF file(s) loaded successfully!'),
+                    backgroundColor: Colors.green,
+                    duration: const Duration(seconds: 2),
+                  ),
+                );
+              } else if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Please drop valid .pdf files'),
+                    backgroundColor: Colors.orange,
+                  ),
+                );
+              }
+            },
+          ),
+        ),
+
+        // 2. Visible UI (Wrapped in IgnorePointer so mouse events pass to DropzoneView)
+        IgnorePointer(
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  _isDragging ? Icons.file_download_outlined : Icons.cloud_upload_outlined,
+                  size: 56,
+                  color: _isDragging ? Colors.blue.shade600 : Colors.blue.shade400,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  _isDragging ? 'Drop your PDF files here!' : 'Drag & Drop PDF files here',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: _isDragging ? Colors.blue.shade700 : Colors.grey.shade800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Supports multiple files for Merge and Split',
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+                ),
+                if (provider.uploadedFiles.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.green.shade200),
+                    ),
+                    child: Text(
+                      '${provider.uploadedFiles.length} file(s) currently ready',
+                      style: TextStyle(
+                        color: Colors.green.shade700,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
-          );
-        }
-      },
-      onHover: () => setState(() => _isDragging = true),
-      onLeave: () => setState(() => _isDragging = false),
-      cursor: CursorType.grab,
+          ),
+        ),
+      ],
     );
   }
 
+  // ==================== MOBILE UPLOAD ====================
   Widget _buildMobileUpload(BuildContext context, PDFProvider provider) {
     return Center(
       child: Column(
@@ -88,14 +163,13 @@ class _DropzoneWidgetState extends State<DropzoneWidget> {
           ),
           const SizedBox(height: 12),
           ElevatedButton.icon(
-            onPressed: () async {
+            onPressed: () {
               try {
-                // For web file picker
                 final input = html.FileUploadInputElement();
                 input.accept = '.pdf';
                 input.multiple = true;
                 input.click();
-                
+
                 input.onChange.listen((e) {
                   final files = input.files;
                   if (files != null && files.isNotEmpty) {
@@ -107,12 +181,14 @@ class _DropzoneWidgetState extends State<DropzoneWidget> {
                         final bytes = reader.result as Uint8List?;
                         if (bytes != null) {
                           provider.addFile(bytes);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('File uploaded successfully!'),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('File uploaded successfully!'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          }
                         }
                       });
                     }
