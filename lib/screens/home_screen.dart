@@ -33,17 +33,22 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-// ==================== DESKTOP VERSION ====================
 class _DesktopHomeScreen extends StatelessWidget {
   const _DesktopHomeScreen();
 
   @override
   Widget build(BuildContext context) {
     final auth = Provider.of<AuthProvider>(context);
+    final provider = Provider.of<PDFProvider>(context,
+        listen: false); // <-- Yeh line add karein
 
     return Scaffold(
       appBar: web_widgets.WebAppBar(
         title: 'ProxPDF',
+        onToolSelected: (toolId) async {
+          final selectedTool = provider.tools.firstWhere((t) => t.id == toolId);
+          await _handleToolTap(context, provider, selectedTool);
+        },
         actions: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -72,7 +77,7 @@ class _DesktopHomeScreen extends StatelessWidget {
                 const SizedBox(width: 8),
                 Text(
                   auth.currentUser.split('@').first,
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: AppColors.primary,
                     fontWeight: FontWeight.w500,
                     fontSize: 14,

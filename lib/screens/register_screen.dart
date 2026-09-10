@@ -268,48 +268,57 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             onPressed: _isLoading
                                 ? null
                                 : () async {
+                                    // 1. Check Terms & Conditions
                                     if (!_agreeTerms) {
                                       ScaffoldMessenger.of(context)
                                           .showSnackBar(
                                         const SnackBar(
                                           content: Text(
-                                            'Please agree to the Terms of Service',
-                                          ),
+                                              'Please agree to the Terms of Service'),
                                           backgroundColor: Colors.orange,
                                         ),
                                       );
                                       return;
                                     }
+
+                                    // 2. Form Validate karein
                                     if (_formKey.currentState!.validate()) {
                                       setState(() => _isLoading = true);
                                       try {
                                         final auth = Provider.of<AuthProvider>(
-                                          context,
-                                          listen: false,
-                                        );
-                                        auth.register(
+                                            context,
+                                            listen: false);
+
+                                        // ⚠️ Yahan AWAIT lagaya hai aur Name bhi pass kiya hai
+                                        await auth.register(
+                                          _nameController.text.trim(),
                                           _emailController.text.trim(),
                                           _passwordController.text.trim(),
                                           _confirmPasswordController.text
                                               .trim(),
                                         );
+
                                         if (mounted) {
                                           ScaffoldMessenger.of(context)
                                               .showSnackBar(
                                             const SnackBar(
                                               content: Text(
-                                                'Registration successful! Welcome to ProxPDF',
-                                              ),
+                                                  'Registration successful! Please sign in.'),
                                               backgroundColor: Colors.green,
                                             ),
                                           );
+                                          // Register hote hi Login Screen par wapas bhej dega
+                                          Navigator.pop(context);
                                         }
                                       } catch (e) {
                                         if (mounted) {
                                           ScaffoldMessenger.of(context)
                                               .showSnackBar(
                                             SnackBar(
-                                              content: Text(e.toString()),
+                                              content: Text(e
+                                                  .toString()
+                                                  .replaceAll(
+                                                      'Exception: ', '')),
                                               backgroundColor: Colors.red,
                                             ),
                                           );

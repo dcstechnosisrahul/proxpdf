@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:proxpdf/providers/auth_provider.dart';
 import 'package:proxpdf/screens/register_screen.dart';
+import 'package:proxpdf/screens/home_screen.dart';
 import 'package:proxpdf/utils/theme_utils.dart';
 import 'package:proxpdf/utils/responsive_utils.dart';
 
@@ -187,27 +188,39 @@ class _LoginScreenState extends State<LoginScreen> {
                                     if (_formKey.currentState!.validate()) {
                                       setState(() => _isLoading = true);
                                       try {
-                                        auth.login(
+                                        // 1. Function call karein (void hai, isliye koi variable assign na karein)
+                                        await auth.login(
                                           _emailController.text.trim(),
                                           _passwordController.text.trim(),
                                         );
+
+                                        // 2. Agar koi exception nahi aayi, to login successful hai
                                         if (mounted) {
                                           ScaffoldMessenger.of(context)
                                               .showSnackBar(
                                             const SnackBar(
                                               content: Text(
-                                                'Login successful! Welcome to ProxPDF',
-                                              ),
+                                                  'Login successful! Welcome to ProxPDF'),
                                               backgroundColor: Colors.green,
                                             ),
                                           );
+                                          Navigator.pushReplacement(
+                                            context,
+                                            MaterialPageRoute(
+                                                builder: (context) =>
+                                                    HomeScreen()),
+                                          );
                                         }
                                       } catch (e) {
+                                        // 3. Galat credentials ya backend error yahan aayega
                                         if (mounted) {
                                           ScaffoldMessenger.of(context)
                                               .showSnackBar(
                                             SnackBar(
-                                              content: Text(e.toString()),
+                                              content: Text(e
+                                                  .toString()
+                                                  .replaceAll(
+                                                      'Exception: ', '')),
                                               backgroundColor: Colors.red,
                                             ),
                                           );

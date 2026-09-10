@@ -8,6 +8,7 @@ import 'package:proxpdf/utils/theme_utils.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const ProxPDFApp());
 }
 
@@ -80,8 +81,20 @@ class ProxPDFApp extends StatelessWidget {
         ),
         home: Consumer<AuthProvider>(
           builder: (context, auth, _) {
+            // 1. Check local storage token loading state
+            if (auth.isLoading) {
+              return const Scaffold(
+                body: Center(
+                  child: CircularProgressIndicator(
+                    color: AppColors.primary,
+                  ),
+                ),
+              );
+            }
+
+            // 2. Persistent auth state routing
             if (auth.isLoggedIn) {
-              return const HomeScreen();
+              return HomeScreen(); // 'const' hata diya hai taaki build error na aaye
             } else {
               return const LoginScreen();
             }
